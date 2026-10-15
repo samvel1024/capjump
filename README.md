@@ -71,6 +71,7 @@ permissions at all. It never needs Screen Recording.
 |---|---|
 | hotkey | show / hide the panel |
 | letter | focus that window |
+| Tab | go back to the previous window, like a quick Alt+Tab (marked ⇥ in the panel) |
 | Esc, or click elsewhere | close |
 
 ```text

@@ -69,6 +69,8 @@ final class Switcher: NSObject, NSWindowDelegate {
                       backing: .buffered, defer: false)
     private var targets: [Character: Win] = [:]
     private var backend: Backend = NativeBackend.shared
+    /// The previously focused window: Tab jumps there, like a quick Alt+Tab.
+    private var recentWin: Win?
 
     override init() {
         super.init()
@@ -92,6 +94,13 @@ final class Switcher: NSObject, NSWindowDelegate {
 
     private func handle(_ event: NSEvent) {
         if event.keyCode == 53 { hide(); return } // Escape
+        if event.keyCode == 48 { // Tab
+            if let w = recentWin {
+                hide()
+                backend.focus(w)
+            }
+            return
+        }
         guard let c = event.charactersIgnoringModifiers?.lowercased().first,
               let w = targets[c] else { return }
         hide()
@@ -104,6 +113,7 @@ final class Switcher: NSObject, NSWindowDelegate {
         let (backend, list) = entries(config)
         self.backend = backend
         targets = Dictionary(list.map { ($0.key, $0.win) }, uniquingKeysWith: { a, _ in a })
+        recentWin = backend.recent(list.map(\.win))
 
         let screen = targetScreen(list.first { $0.win.hasFocus }?.win) ?? NSScreen.main ?? NSScreen.screens[0]
         let vf = screen.visibleFrame
@@ -198,6 +208,13 @@ final class Switcher: NSObject, NSWindowDelegate {
         l.alignment = .left
         l.frame = NSRect(x: s * 0.08, y: s * 0.04, width: s * 0.4, height: s * 0.27)
         v.addSubview(l)
+
+        if e.win.id == recentWin?.id {
+            let tab = tileLabel("⇥", size: s * 0.17, weight: .bold, color: .white.withAlphaComponent(0.6))
+            tab.alignment = .right
+            tab.frame = NSRect(x: s * 0.5, y: s * 0.05, width: s * 0.42, height: s * 0.24)
+            v.addSubview(tab)
+        }
 
         let iconSize = s * 0.38
         let icon = NSImageView(frame: NSRect(x: (s - iconSize) / 2, y: s * 0.17, width: iconSize, height: iconSize))
@@ -299,7 +316,12 @@ final class Switcher: NSObject, NSWindowDelegate {
             p.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
             views.append(p)
         }
-        let r = NSStackView(views: views + [title, spacer, space])
+        views += [title, spacer]
+        if e.win.id == recentWin?.id {
+            views.append(label("⇥ tab", font: .systemFont(ofSize: 12 * scale, weight: .semibold),
+                               color: .secondaryLabelColor))
+        }
+        let r = NSStackView(views: views + [space])
         r.orientation = .horizontal
         r.spacing = 8 * scale
         r.widthAnchor.constraint(equalToConstant: (640 - 28) * scale).isActive = true

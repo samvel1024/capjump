@@ -121,6 +121,10 @@ for a in NSWorkspace.shared.runningApplications where a.activationPolicy == .reg
     appIcon(a.processIdentifier)
 }
 
+// Start tracking focus history right away, so Tab has a previous window to
+// go back to even on the first open (yabai tracks its own).
+_ = NativeBackend.shared
+
 // The native backend resolves each new window through Accessibility once
 // (~70ms per app for windows on other Spaces). Do that ahead of time while
 // the panel is closed, so opening it stays instant.

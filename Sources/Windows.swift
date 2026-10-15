@@ -16,6 +16,8 @@ protocol Backend {
     /// All switchable windows, or nil when this backend can't be used.
     func windows() -> [Win]?
     func focus(_ w: Win)
+    /// The window that was focused before the current one (Tab's target).
+    func recent(_ wins: [Win]) -> Win?
 }
 
 /// "auto" prefers yabai when it answers, since it already knows exactly which
@@ -103,6 +105,14 @@ struct YabaiBackend: Backend {
     func focus(_ w: Win) {
         if let path = Self.path { _ = run(path, ["-m", "window", "--focus", String(w.id)]) }
     }
+
+    func recent(_ wins: [Win]) -> Win? {
+        guard let path = Self.path,
+              let data = run(path, ["-m", "query", "--windows", "--window", "recent"]),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let id = obj["id"] as? Int else { return nil }
+        return wins.first { $0.id == UInt32(id) && !$0.hasFocus }
+    }
 }
 
 // MARK: - Native
@@ -147,6 +157,7 @@ final class NativeBackend: Backend {
         getPSN = sym(nil, "GetProcessForPID")          // RTLD_DEFAULT
         axGetWindow = sym(nil, "_AXUIElementGetWindow")
         createWithToken = sym(nil, "_AXUIElementCreateWithRemoteToken")
+        observeActivations()
     }
 
     func windows() -> [Win]? {
@@ -204,7 +215,10 @@ final class NativeBackend: Backend {
             }
 
             let focused = !focusTaken && c.onscreen && c.pid == front
-            if focused { focusTaken = true }
+            if focused {
+                focusTaken = true
+                noteFocused(c.wid)
+            }
             out.append(Win(id: c.wid, pid: c.pid, app: c.app.localizedName ?? "?", title: title,
                            space: c.spaces.compactMap { spaceIndex[$0] }.first ?? 0,
                            frame: c.frame, hasFocus: focused))
@@ -285,6 +299,41 @@ final class NativeBackend: Backend {
         var cache: [pid_t: [UInt32: AXUIElement]] = [:]
         if let el = axWindows(w.pid, cache: &cache)[w.id] {
             AXUIElementPerformAction(el, kAXRaiseAction as CFString)
+        }
+        noteFocused(w.id)
+    }
+
+    // MARK: focus history
+
+    /// Most recently focused window ids, newest first. Fed by app activations
+    /// (whatever caused them), the focused window seen on each listing, and
+    /// our own focus calls.
+    private var mru: [UInt32] = []
+
+    private func noteFocused(_ wid: UInt32) {
+        mru.removeAll { $0 == wid }
+        mru.insert(wid, at: 0)
+        if mru.count > 64 { mru.removeLast() }
+    }
+
+    func recent(_ wins: [Win]) -> Win? {
+        let byId = Dictionary(wins.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        return mru.lazy.compactMap { byId[$0] }.first { !$0.hasFocus }
+    }
+
+    private func observeActivations() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let self, AXIsProcessTrusted(), let axGetWindow = self.axGetWindow,
+                  let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+            let el = AXUIElementCreateApplication(app.processIdentifier)
+            AXUIElementSetMessagingTimeout(el, 0.2)
+            var wid: UInt32 = 0
+            if let focused = self.attr(el, kAXFocusedWindowAttribute),
+               axGetWindow(focused as! AXUIElement, &wid) == .success, wid != 0 {
+                self.noteFocused(wid)
+            }
         }
     }
 
