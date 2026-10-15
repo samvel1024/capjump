@@ -1,6 +1,8 @@
-# Capjump
+<p align="center"><img src="docs/logo.png" width="128" alt="Capjump"></p>
 
-**Jump to any window on macOS by pressing one letter.**
+<h1 align="center">Capjump</h1>
+
+<p align="center"><strong>Jump to any window on macOS by pressing one letter.</strong></p>
 
 Press the hotkey and every open window, on every Space, appears with a
 letter. Press the letter and you're there. You don't cycle through windows

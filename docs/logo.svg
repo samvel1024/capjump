@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#34363C"/>
+      <stop offset="1" stop-color="#16171A"/>
+    </linearGradient>
+    <linearGradient id="cap" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4C4F57"/>
+      <stop offset="1" stop-color="#383A40"/>
+    </linearGradient>
+  </defs>
+
+  <!-- macOS icon plate -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+
+  <!-- keycap: dark base with a lighter, slightly raised top face -->
+  <rect x="267" y="327" width="490" height="470" rx="92" fill="#0E0F11"/>
+  <rect x="297" y="337" width="430" height="400" rx="72" fill="url(#cap)"/>
+  <rect x="297" y="337" width="430" height="400" rx="72" fill="none" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="4"/>
+
+  <!-- the letter: a C drawn as a thick arc, open to the right -->
+  <path d="M 590 458 A 100 100 0 1 0 590 616" fill="none" stroke="#FFD60A" stroke-width="54" stroke-linecap="round"/>
+
+  <!-- the jump: a short arc leaving the key, landing on a dot -->
+  <path d="M 640 300 Q 700 190 790 230" fill="none" stroke="#FFD60A" stroke-width="22" stroke-linecap="round" stroke-dasharray="1 44"/>
+  <circle cx="800" cy="236" r="26" fill="#FFD60A"/>
+</svg>

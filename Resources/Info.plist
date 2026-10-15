@@ -10,6 +10,8 @@
   <string>Capjump</string>
   <key>CFBundleExecutable</key>
   <string>capjump</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
