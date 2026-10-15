@@ -1,0 +1,16 @@
+{
+  "hotkey": "alt+tab",
+  "layout": "keyboard",
+  "backend": "auto",
+  "scale": 1.2,
+  "rules": [
+    { "key": "s", "app": "^Safari$" },
+    { "key": "f", "app": "^Finder$" },
+    { "key": "n", "app": "^Notes$" },
+    { "key": "c", "app": "^Google Chrome$", "title": " - Personal$" },
+    { "key": "w", "app": "^Google Chrome$", "title": " - Work$" }
+  ],
+  "ignore": [
+    { "app": "^System Settings$" }
+  ]
+}
