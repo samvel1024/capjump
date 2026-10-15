@@ -49,17 +49,19 @@ Press **Option+Tab**.
 
 ### Permissions
 
-| Permission | Needed for |
-|---|---|
-| **Accessibility** | Overriding Cmd+Tab, and the native backend (raising windows, reading titles). macOS asks the first time it's needed. |
-| **Screen Recording** *(optional)* | Native backend only: lets it read titles of windows on *other* Spaces and filter out invisible helper windows. Without it those windows show only the app name. |
+Capjump needs **Accessibility** for the native backend (reading window titles
+and types, raising windows) and for overriding Cmd+Tab. macOS asks for it the
+first time Capjump starts. Turn it on in **System Settings → Privacy &
+Security → Accessibility**; it takes effect without a restart.
 
 With yabai as the backend and a hotkey other than Cmd+Tab, Capjump needs no
-permissions at all.
+permissions at all. It never needs Screen Recording.
 
-> Capjump is ad-hoc signed. After rebuilding, macOS may treat it as a new app,
-> so you'd have to turn it off and on again in **System Settings → Privacy &
-> Security → Accessibility**.
+> The build is ad-hoc signed, with its code requirement pinned to the bundle
+> id, so the permission keeps working after you rebuild. If macOS keeps asking
+> although Capjump is switched on (for example, after upgrading from an older
+> build), run `tccutil reset Accessibility io.github.samvel1024.capjump` and
+> grant it again.
 
 ## Usage
 
@@ -139,8 +141,13 @@ exactly the windows yabai manages, and focusing goes through yabai.
 
 - **Window list:** comes from `yabai -m query --windows`. Without yabai, it
   comes from `CGWindowListCopyWindowInfo`, plus SkyLight's per-window Space
-  lookup, which is what drops minimized windows and offscreen helper surfaces.
-  On the current Space, Accessibility titles and window types are used too.
+  lookup, which drops minimized windows and offscreen buffers. Each window is
+  then matched to its Accessibility element, which provides the full title
+  and the window type, and filters out helper surfaces. Accessibility hides
+  windows on other Spaces, so for those Capjump addresses the app's elements
+  directly by forging their remote tokens (the technique AltTab uses). The
+  result is cached per window, and Capjump refreshes it in the background so
+  opening the panel stays instant.
 - **Focusing:** the native backend does what yabai does without its scripting
   addition: `_SLPSSetFrontProcessWithOptions` (which also switches Spaces), a
   synthetic make-key event, then an Accessibility raise. No SIP changes are

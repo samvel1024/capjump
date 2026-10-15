@@ -14,7 +14,10 @@ $(APP): $(SOURCES) Resources/Info.plist
 	@mkdir -p $(APP)/Contents/MacOS
 	cp Resources/Info.plist $(APP)/Contents/Info.plist
 	swiftc -O -o $(APP)/Contents/MacOS/capjump $(SOURCES)
-	codesign --force --sign - $(APP)
+	@# Ad-hoc signatures default to a cdhash requirement, so every rebuild
+	@# looks like a new app to macOS privacy settings and loses its
+	@# Accessibility grant. Pin the requirement to the bundle id instead.
+	codesign --force --sign - -r='designated => identifier "$(LABEL)"' $(APP)
 
 install: build
 	@mkdir -p $(APPDIR) $(BINDIR) $(dir $(AGENT)) $(dir $(CONFIG))

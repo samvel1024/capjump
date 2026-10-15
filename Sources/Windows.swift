@@ -123,6 +123,7 @@ final class NativeBackend: Backend {
     private typealias PostEventFn = @convention(c) (UnsafeMutableRawPointer, UnsafeMutableRawPointer) -> Int32
     private typealias GetPSNFn = @convention(c) (pid_t, UnsafeMutableRawPointer) -> OSStatus
     private typealias AXGetWindowFn = @convention(c) (AXUIElement, UnsafeMutablePointer<UInt32>) -> AXError
+    private typealias CreateWithTokenFn = @convention(c) (CFData) -> Unmanaged<AXUIElement>?
 
     private let mainConn: MainConnFn?
     private let copyDisplaySpaces: CopyDisplaySpacesFn?
@@ -131,6 +132,7 @@ final class NativeBackend: Backend {
     private let postEvent: PostEventFn?
     private let getPSN: GetPSNFn?
     private let axGetWindow: AXGetWindowFn?
+    private let createWithToken: CreateWithTokenFn?
 
     private init() {
         let sl = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY)
@@ -144,6 +146,7 @@ final class NativeBackend: Backend {
         postEvent = sym(sl, "SLPSPostEventRecordTo")
         getPSN = sym(nil, "GetProcessForPID")          // RTLD_DEFAULT
         axGetWindow = sym(nil, "_AXUIElementGetWindow")
+        createWithToken = sym(nil, "_AXUIElementCreateWithRemoteToken")
     }
 
     func windows() -> [Win]? {
@@ -160,9 +163,9 @@ final class NativeBackend: Backend {
         let trusted = AXIsProcessTrusted()
         let canReadNames = CGPreflightScreenCaptureAccess()
 
-        var axCache: [pid_t: [UInt32: AXUIElement]] = [:]
-        var focusTaken = false
-        var out: [Win] = []
+        struct Candidate { let wid: UInt32; let pid: pid_t; let app: NSRunningApplication
+                           let frame: CGRect; let spaces: [UInt64]; let cgName: String; let onscreen: Bool }
+        var candidates: [Candidate] = []
         for info in list {
             guard (info[kCGWindowLayer as String] as? Int) == 0,
                   let wid = (info[kCGWindowNumber as String] as? Int).map(UInt32.init),
@@ -172,34 +175,93 @@ final class NativeBackend: Backend {
                   let bounds = info[kCGWindowBounds as String] as? NSDictionary,
                   let frame = CGRect(dictionaryRepresentation: bounds),
                   frame.width >= 60, frame.height >= 60 else { continue }
-
             // Windows that belong to no Space are minimized or otherwise not
             // really there (offscreen buffers, closed-but-cached windows).
             let spaces = spacesFor(cid, wid)
             guard copySpacesForWindows == nil || !spaces.isEmpty else { continue }
+            candidates.append(Candidate(wid: wid, pid: pid, app: app, frame: frame, spaces: spaces,
+                                        cgName: info[kCGWindowName as String] as? String ?? "",
+                                        onscreen: info[kCGWindowIsOnscreen as String] as? Bool ?? false))
+        }
 
-            // AX (current Space only) is authoritative: it can tell dialogs and
-            // palettes apart, and has the full title (Chrome's includes the
-            // profile). Elsewhere fall back to CG, whose names need Screen
-            // Recording; with that granted, every real window has a name, so
-            // nameless ones are helper surfaces (Chrome has a dozen of them).
-            let cgName = info[kCGWindowName as String] as? String ?? ""
-            var title = cgName
-            if let el = trusted ? axWindows(pid, cache: &axCache)[wid] : nil {
+        if trusted { resolveAX(Dictionary(grouping: candidates.map { ($0.pid, $0.wid) }, by: \.0)) }
+
+        var focusTaken = false
+        var out: [Win] = []
+        for c in candidates {
+            // With Accessibility, a CG window with no AX window behind it is a
+            // helper surface (Chrome keeps a dozen); AX also has the window
+            // type and the full title (Chrome's includes the profile). Without
+            // it, fall back to CG names, which need Screen Recording; when
+            // those are readable every real window has one.
+            var title = c.cgName
+            if trusted {
+                guard let el = axKnown[c.wid] else { continue }
                 if let sub = attr(el, kAXSubroleAttribute) as? String, sub != kAXStandardWindowSubrole { continue }
-                title = attr(el, kAXTitleAttribute) as? String ?? cgName
-            } else if cgName.isEmpty && canReadNames {
+                title = attr(el, kAXTitleAttribute) as? String ?? c.cgName
+            } else if c.cgName.isEmpty && canReadNames {
                 continue
             }
 
-            let onscreen = info[kCGWindowIsOnscreen as String] as? Bool ?? false
-            let focused = !focusTaken && onscreen && pid == front
+            let focused = !focusTaken && c.onscreen && c.pid == front
             if focused { focusTaken = true }
-            out.append(Win(id: wid, pid: pid, app: app.localizedName ?? "?", title: title,
-                           space: spaces.compactMap { spaceIndex[$0] }.first ?? 0,
-                           frame: frame, hasFocus: focused))
+            out.append(Win(id: c.wid, pid: c.pid, app: c.app.localizedName ?? "?", title: title,
+                           space: c.spaces.compactMap { spaceIndex[$0] }.first ?? 0,
+                           frame: c.frame, hasFocus: focused))
         }
         return out
+    }
+
+    // MARK: AX window resolution
+
+    /// window id → AX element, across all Spaces. Elements stay valid for the
+    /// window's lifetime, so each window is resolved once.
+    private var axKnown: [UInt32: AXUIElement] = [:]
+    /// Window ids with no AX window behind them, and when that was decided
+    /// (rechecked after a while, in case AX just hadn't caught up yet).
+    private var axMissing: [UInt32: Date] = [:]
+
+    private func resolveAX(_ byPid: [pid_t: [(pid_t, UInt32)]]) {
+        let now = Date()
+        for (pid, pairs) in byPid {
+            let unknown = pairs.map(\.1).filter { wid in
+                axKnown[wid] == nil && (axMissing[wid].map { now.timeIntervalSince($0) > 10 } ?? true)
+            }
+            guard !unknown.isEmpty else { continue }
+            // kAXWindows is cheap but only covers the current Space; only
+            // brute-force the app's AX element ids when something's still
+            // missing (windows on other Spaces).
+            var cache: [pid_t: [UInt32: AXUIElement]] = [:]
+            axKnown.merge(axWindows(pid, cache: &cache)) { $1 }
+            if unknown.contains(where: { axKnown[$0] == nil }) {
+                axKnown.merge(bruteForceAXWindows(pid)) { $1 }
+            }
+            for wid in unknown where axKnown[wid] == nil { axMissing[wid] = now }
+        }
+        if axKnown.count > 2000 { axKnown.removeAll() }
+        if axMissing.count > 2000 { axMissing.removeAll() }
+    }
+
+    /// AX hides windows on other Spaces from kAXWindows, but they can still
+    /// be reached by forging the remote token AX uses to address elements:
+    /// pid, 0, 0x636f636f ("coco"), element id. Window elements have small ids, so a scan
+    /// of the first thousand finds them (the trick AltTab uses).
+    private func bruteForceAXWindows(_ pid: pid_t) -> [UInt32: AXUIElement] {
+        guard let createWithToken, let axGetWindow else { return [:] }
+        var token = Data(count: 20)
+        withUnsafeBytes(of: pid) { token.replaceSubrange(0..<4, with: $0) }
+        token.replaceSubrange(8..<12, with: [0x6f, 0x63, 0x6f, 0x63])
+        var map: [UInt32: AXUIElement] = [:]
+        for id: UInt64 in 0..<1000 {
+            withUnsafeBytes(of: id) { token.replaceSubrange(12..<20, with: $0) }
+            guard let el = createWithToken(token as CFData)?.takeRetainedValue() else { continue }
+            var wid: UInt32 = 0
+            if axGetWindow(el, &wid) == .success, wid != 0,
+               (attr(el, kAXRoleAttribute) as? String) == kAXWindowRole {
+                map[wid] = el
+            }
+        }
+        return map
     }
 
     func focus(_ w: Win) {

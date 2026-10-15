@@ -96,6 +96,9 @@ func applySettings() {
     } else {
         hotkeys.register(nil)
     }
+    FileHandle.standardError.write(
+        "capjump: accessibility=\(AXIsProcessTrusted()) screen-recording=\(CGPreflightScreenCaptureAccess())\n"
+            .data(using: .utf8)!)
     // The native backend needs Accessibility to raise windows and read
     // titles; ask once up front rather than on first use.
     if config.backend == "native" || (config.backend != "yabai" && YabaiBackend().windows() == nil) {
@@ -116,6 +119,19 @@ reloadSignal.resume()
 
 for a in NSWorkspace.shared.runningApplications where a.activationPolicy == .regular {
     appIcon(a.processIdentifier)
+}
+
+// The native backend resolves each new window through Accessibility once
+// (~70ms per app for windows on other Spaces). Do that ahead of time while
+// the panel is closed, so opening it stays instant.
+func warmUp() {
+    let backend = loadConfig().backend
+    guard backend == "native" || (backend != "yabai" && YabaiBackend.path == nil) else { return }
+    _ = NativeBackend.shared.windows()
+}
+warmUp()
+let warmTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in
+    if !switcher.panel.isVisible { warmUp() }
 }
 
 app.run()
