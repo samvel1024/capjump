@@ -69,8 +69,10 @@ final class Switcher: NSObject, NSWindowDelegate {
                       backing: .buffered, defer: false)
     private var targets: [Character: Win] = [:]
     private var backend: Backend = NativeBackend.shared
-    /// The previously focused window: Tab jumps there, like a quick Alt+Tab.
+    /// The previously focused window: the previous key (Tab by default) jumps
+    /// there, like a quick Alt+Tab.
     private var recentWin: Win?
+    private var previous = PreviousKey("tab")
 
     override init() {
         super.init()
@@ -94,7 +96,7 @@ final class Switcher: NSObject, NSWindowDelegate {
 
     private func handle(_ event: NSEvent) {
         if event.keyCode == 53 { hide(); return } // Escape
-        if event.keyCode == 48 { // Tab
+        if previous.matches(event.keyCode, event.charactersIgnoringModifiers) {
             if let w = recentWin {
                 hide()
                 backend.focus(w)
@@ -114,6 +116,7 @@ final class Switcher: NSObject, NSWindowDelegate {
         self.backend = backend
         targets = Dictionary(list.map { ($0.key, $0.win) }, uniquingKeysWith: { a, _ in a })
         recentWin = backend.recent(list.map(\.win))
+        previous = config.previous
 
         let screen = targetScreen(list.first { $0.win.hasFocus }?.win) ?? NSScreen.main ?? NSScreen.screens[0]
         let vf = screen.visibleFrame
@@ -173,7 +176,7 @@ final class Switcher: NSObject, NSWindowDelegate {
         let v = FlippedView()
         for (r, row) in rows.enumerated() {
             for (i, c) in row.keys.enumerated() {
-                let tile = keyTile(c, byKey[c], size: s)
+                let tile = c == previous.reservedChar ? previousTile(c, size: s) : keyTile(c, byKey[c], size: s)
                 tile.setFrameOrigin(NSPoint(x: pad + (row.offset - minOffset + CGFloat(i)) * unit,
                                             y: pad + CGFloat(r) * unit))
                 v.addSubview(tile)
@@ -230,6 +233,41 @@ final class Switcher: NSObject, NSWindowDelegate {
         let sub = tileLabel(profile ?? title, size: s * 0.11, weight: .regular,
                             color: profile != nil ? .systemTeal : .white.withAlphaComponent(0.55))
         sub.frame = NSRect(x: 3, y: s * 0.76, width: s - 6, height: s * 0.17)
+        v.addSubview(sub)
+        return v
+    }
+
+    /// The key reserved for "previous window": shows where it would take you.
+    private func previousTile(_ c: Character, size s: CGFloat) -> NSView {
+        let v = FlippedView(frame: NSRect(x: 0, y: 0, width: s, height: s))
+        v.wantsLayer = true
+        v.layer?.cornerRadius = s * 0.14
+        v.layer?.borderWidth = 1.5
+        v.layer?.borderColor = NSColor.systemYellow.withAlphaComponent(0.45).cgColor
+        v.layer?.backgroundColor = NSColor.systemYellow.withAlphaComponent(0.08).cgColor
+
+        let l = tileLabel(String(c).uppercased(), size: s * 0.2, weight: .heavy, color: .systemYellow)
+        l.alignment = .left
+        l.frame = NSRect(x: s * 0.08, y: s * 0.04, width: s * 0.4, height: s * 0.27)
+        v.addSubview(l)
+        let tab = tileLabel("⇥", size: s * 0.17, weight: .bold, color: .systemYellow)
+        tab.alignment = .right
+        tab.frame = NSRect(x: s * 0.5, y: s * 0.05, width: s * 0.42, height: s * 0.24)
+        v.addSubview(tab)
+
+        if let w = recentWin {
+            let iconSize = s * 0.38
+            let icon = NSImageView(frame: NSRect(x: (s - iconSize) / 2, y: s * 0.17, width: iconSize, height: iconSize))
+            icon.image = appIcon(w.pid)
+            icon.imageScaling = .scaleProportionallyUpOrDown
+            icon.alphaValue = 0.8
+            v.addSubview(icon)
+            let name = tileLabel(w.app, size: s * 0.13, weight: .semibold, color: .white)
+            name.frame = NSRect(x: 3, y: s * 0.57, width: s - 6, height: s * 0.19)
+            v.addSubview(name)
+        }
+        let sub = tileLabel("previous", size: s * 0.11, weight: .regular, color: .systemYellow.withAlphaComponent(0.8))
+        sub.frame = NSRect(x: 3, y: s * (recentWin == nil ? 0.45 : 0.76), width: s - 6, height: s * 0.17)
         v.addSubview(sub)
         return v
     }
@@ -318,7 +356,7 @@ final class Switcher: NSObject, NSWindowDelegate {
         }
         views += [title, spacer]
         if e.win.id == recentWin?.id {
-            views.append(label("⇥ tab", font: .systemFont(ofSize: 12 * scale, weight: .semibold),
+            views.append(label("⇥ \(previous.label)", font: .systemFont(ofSize: 12 * scale, weight: .semibold),
                                color: .secondaryLabelColor))
         }
         let r = NSStackView(views: views + [space])

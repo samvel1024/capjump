@@ -71,7 +71,7 @@ permissions at all. It never needs Screen Recording.
 |---|---|
 | hotkey | show / hide the panel |
 | letter | focus that window |
-| Tab | go back to the previous window, like a quick Alt+Tab (marked ⇥ in the panel) |
+| Tab | go back to the previous window, like a quick Alt+Tab (marked ⇥ in the panel; change it with `previousKey`) |
 | Esc, or click elsewhere | close |
 
 ```text
@@ -112,6 +112,7 @@ changes to rules, layout and scale take effect immediately. After changing
 | `layout` | `"keyboard"` | `"keyboard"` shows windows on a QWERTY map. `"list"` shows one row per window. |
 | `backend` | `"auto"` | `"auto"` uses yabai when it's running and the native backend otherwise. You can also force `"yabai"` or `"native"`. |
 | `scale` | `1.2` | Size of the panel. |
+| `previousKey` | `"tab"` | Key that jumps back to the previous window: `"tab"`, `"space"`, `"return"`, or a single character such as `"j"`. A character is never given to a window, and in the keyboard layout its key shows where it leads. |
 | `rules` | `[]` | Pins `key` to the first window matching `app` and/or `title`. Patterns are case-insensitive regular expressions. A pinned key is reserved even when its app isn't running. |
 | `ignore` | `[]` | Hides windows matching `app` and/or `title`. |
 

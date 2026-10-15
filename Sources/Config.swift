@@ -27,12 +27,53 @@ struct Config: Decodable {
     var backend: String?
     /// Overall size multiplier for the panel.
     var scale: Double?
+    /// Key that jumps back to the previously focused window: "tab" (default),
+    /// "space", "return", or any single character such as "j". A character is
+    /// reserved, so no window gets it.
+    var previousKey: String?
     var rules: [Rule]?
     var ignore: [Rule]?
+
+    var previous: PreviousKey { PreviousKey(previousKey ?? "tab") }
 
     var hotkeySpec: String? {
         let h = hotkey ?? "alt+tab"
         return ["", "none", "off"].contains(h.lowercased()) ? nil : h
+    }
+}
+
+/// The "go back" key inside the panel: a named key, or a reserved character.
+enum PreviousKey: Equatable {
+    case code(UInt16, label: String)
+    case char(Character)
+
+    init(_ spec: String) {
+        switch spec.lowercased() {
+        case "tab": self = .code(48, label: "tab")
+        case "space": self = .code(49, label: "space")
+        case "return", "enter": self = .code(36, label: "return")
+        case let s where s.count == 1: self = .char(s.first!)
+        default: self = .code(48, label: "tab")
+        }
+    }
+
+    var reservedChar: Character? {
+        if case .char(let c) = self { return c }
+        return nil
+    }
+
+    var label: String {
+        switch self {
+        case .code(_, let label): return label
+        case .char(let c): return String(c).uppercased()
+        }
+    }
+
+    func matches(_ keyCode: UInt16, _ chars: String?) -> Bool {
+        switch self {
+        case .code(let code, _): return keyCode == code
+        case .char(let c): return chars?.lowercased().first == c
+        }
     }
 }
 
