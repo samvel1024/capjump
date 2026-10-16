@@ -9,6 +9,8 @@ letter. Press the letter and you're there. You don't cycle through windows
 or search for them, and the same window keeps the same letter, so after a day
 you don't even need to look.
 
+![Capjump in use: ⌥ Tab, then P, I, C to jump between windows](docs/demo.gif)
+
 ![Keyboard layout](docs/keyboard.png)
 
 - **One keystroke per switch.** Opening the panel and switching takes two keys.
