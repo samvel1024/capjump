@@ -4,12 +4,12 @@
 
 <p align="center"><strong>Jump to any window on macOS by pressing one letter.</strong></p>
 
+<p align="center"><img src="docs/demo.gif" width="800" alt="Capjump in use: ⌥ Tab, then P to jump to Preview, then S back to Safari"></p>
+
 Press the hotkey and every open window, on every Space, appears with a
 letter. Press the letter and you're there. You don't cycle through windows
 or search for them, and the same window keeps the same letter, so after a day
 you don't even need to look.
-
-![Capjump in use: ⌥ Tab, then P to jump to Preview, then S back to Safari](docs/demo.gif)
 
 ![Keyboard layout](docs/keyboard.png)
 
